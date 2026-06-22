@@ -666,27 +666,44 @@ const PROMPT_JSON_TEMPLATE=`Você é um especialista em Educação Inclusiva e D
 2. NÃO mencione em nenhum lugar que a prova é "adaptada", "versão especial", ou faça referência à condição do estudante (TDAH, Dislexia, etc.) — nem no título, nem nas instruções, nem nas questões.
 3. Mantenha TODOS os dados matemáticos, fórmulas, frações e expressões exatamente como no original — nunca simplifique ou altere valores numéricos.
 
-### Formato das questões
-4. Cada questão deve ter:
-   - Campo "instruction": comando curto no imperativo em maiúsculas, ex: "RACIONALIZE OS DENOMINADORES ABAIXO:", "RESOLVA O PROBLEMA ABAIXO MOSTRANDO AS CONTAS.", "MARQUE com um X a resposta certa."
-   - Campo "example" quando a questão exigir transformação, classificação ou completar: mostre um exemplo resolvido com frase diferente da questão.
-   - Para questões dissertativas/de resolução (matemática, desenvolvimento): use type "open_text" com open_lines adequado ao espaço necessário (mínimo 6 para cálculo extenso).
-   - Para questões de múltipla escolha: use type "multiple_choice".
-   - Para completar com banco de palavras: use type "fill_blank" com word_bank.
-   - Para ligar colunas: use type "matching".
+### Tabelas — REGRA CRÍTICA
+4. Quando a questão original pede para COMPLETAR UMA TABELA, você DEVE preservar a tabela completa na versão adaptada. Use type "table" com os campos:
+   - "headers": lista com os cabeçalhos das colunas, ex: ["Vitamina", "Função", "Deficiência"]
+   - "rows": lista de linhas, cada linha é uma lista com os valores de cada célula. Células que o aluno deve preencher ficam como string vazia "". Células com conteúdo dado pelo professor são preenchidas.
+   - Exemplo de questão "complete a tabela sobre vitaminas":
+     "type": "table",
+     "headers": ["Vitamina", "Função(ões)", "Deficiência"],
+     "rows": [["A", "", ""], ["D", "", ""], ["K", "", ""], ["C", "", ""]]
+   - NÃO converta tabelas em listas de itens nem em fill_blank — mantenha sempre como tabela.
 
-### Textos de apoio (quando houver)
-5. Inclua em "reading_texts":
+### Formato das questões
+5. Cada questão deve ter:
+   - Campo "instruction": comando curto no imperativo em maiúsculas.
+   - Campo "example" quando a questão exigir transformação, classificação ou completar sem tabela.
+   - Para questões dissertativas/de resolução: use type "open_text" com open_lines adequado (mínimo 6).
+   - Para questões de múltipla escolha: use type "multiple_choice".
+   - Para completar com banco de palavras (sem tabela): use type "fill_blank" com word_bank.
+   - Para ligar colunas: use type "matching".
+   - Para completar tabelas: use type "table" conforme regra 4 acima.
+
+### Imagens — REGRA CRÍTICA
+6. O texto das questões pode conter marcadores como [IMAGEM_UPLOAD_0], [IMAGEM_UPLOAD_1], etc. Esses marcadores representam IMAGENS REAIS do arquivo original do professor (gráficos, figuras, diagramas, tubos de ensaio, mapas, etc.).
+   - Você DEVE preservar cada marcador EXATAMENTE como está (mesmo texto, mesmo número) no campo "context_lines" da questão correspondente.
+   - Exemplo: se a questão 9 tinha uma figura de tubos de ensaio marcada como [IMAGEM_UPLOAD_2], coloque "[IMAGEM_UPLOAD_2]" como uma linha dentro de "context_lines" da questão 9.
+   - NUNCA substitua um marcador por texto como "(OBSERVE A FIGURA...)" ou "(VER FIGURA)" — o marcador deve aparecer literalmente no JSON.
+   - O sistema vai automaticamente renderizar a imagem real no lugar do marcador.
+
+6. Inclua em "reading_texts":
    - "summary": 2 a 4 frases simples resumindo o texto
    - "excerpt": apenas as linhas necessárias para responder, com "(…)" nos cortes
    - "glossary": palavras difíceis com definição curta
 
 ### Instruções gerais
-6. Em "general_instructions": 3 a 5 frases curtas e concretas (ex: "Leia cada questão com calma.", "Escreva com caneta azul ou preta.").
+7. Em "general_instructions": 3 a 5 frases curtas e concretas (ex: "Leia cada questão com calma.", "Escreva com caneta azul ou preta.").
 
 ## Meta — IMPORTANTE
-7. Deixe "title" e "subtitle" como string vazia "". O sistema já gera o cabeçalho completo automaticamente.
-8. Deixe "discipline", "professor" e "total_value" também vazios — o sistema os preenche.
+8. Deixe "title" e "subtitle" como string vazia "". O sistema já gera o cabeçalho completo automaticamente.
+9. Deixe "discipline", "professor" e "total_value" também vazios — o sistema os preenche.
 
 ## Formato de saída
 Responda APENAS com JSON válido, sem markdown, sem \`\`\`json, sem texto antes ou depois.
@@ -717,7 +734,9 @@ Responda APENAS com JSON válido, sem markdown, sem \`\`\`json, sem texto antes 
       "right_items": ["categoria"],
       "reference_box": {"lines":["categoria = definição"]},
       "items": [{"label":"a)","text":"pergunta","options":["opção A","opção B"]}],
-      "open_lines": 8
+      "open_lines": 8,
+      "headers": ["Coluna 1","Coluna 2","Coluna 3"],
+      "rows": [["dado fixo","",""],["dado fixo","",""]]
     }
   ]
 }`;
@@ -1344,7 +1363,15 @@ function renderizarJSONparaHTML(data){
       <div style="background:#fff3e0;border-left:4px solid #f59e0b;border-radius:0 6px 6px 0;padding:6px 10px;font-size:11px;font-weight:700;margin-bottom:8px">
         📌 O QUE FAZER: ${q.instruction||''}
       </div>
-      ${q.context_lines?.length?`<div style="font-size:11px;margin-bottom:8px;line-height:1.6">${q.context_lines.join('<br>')}</div>`:''}
+      ${q.context_lines?.length?`<div style="font-size:11px;margin-bottom:8px;line-height:1.8">${q.context_lines.map(l=>{
+        const mImg=l.match(/^\[IMAGEM_UPLOAD_(\d+)\]$/);
+        if(mImg){
+          const img=S.imagensUpload?.[parseInt(mImg[1])];
+          if(img)return`<div style="margin:8px 0;text-align:center"><img src="data:${img.contentType};base64,${img.data}" style="max-width:100%;max-height:280px;border:1px solid #ddd;border-radius:4px"/></div>`;
+          return`<div class="img-block">🖼️ Imagem ${mImg[1]}</div>`;
+        }
+        return l;
+      }).join('<br>')}</div>`:''}
       ${q.example?.lines?.length?`<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:6px;padding:7px 10px;font-size:10px;margin-bottom:8px"><strong>💡 ${q.example.label||'Exemplo:'}</strong><br>${q.example.lines.map(l=>`<div style="margin-top:3px">${l}</div>`).join('')}</div>`:''}
       ${renderizarCorpoQuestaoHTML(q)}
     </div>`;
@@ -1382,6 +1409,20 @@ function renderizarCorpoQuestaoHTML(q){
         h+=`<div style="margin-bottom:4px">( &nbsp;&nbsp; ) ${ri}</div>`;
       });
       h+=`</div>`;
+    }
+  }else if(q.type==='table'){
+    const headers=q.headers||[];
+    const rows=q.rows||[];
+    if(headers.length){
+      h+=`<div style="overflow-x:auto;margin-bottom:8px">
+        <table style="border-collapse:collapse;width:100%;font-size:11px">
+          <thead><tr>${headers.map(hd=>`<th style="border:1.5px solid #555;padding:5px 8px;background:#f0f0f0;font-weight:700;text-align:center">${hd}</th>`).join('')}</tr></thead>
+          <tbody>${rows.map(row=>`<tr>${row.map((cell,ci)=>{
+            const vazia=cell===''||cell===null||cell===undefined;
+            return `<td style="border:1px solid #aaa;padding:5px 8px;min-width:80px;min-height:24px;background:${vazia?'#f9fff6':'#fff'};text-align:${ci===0?'left':'center'}">${vazia?'&nbsp;':cell}</td>`;
+          }).join('')}</tr>`).join('')}</tbody>
+        </table>
+      </div>`;
     }
   }else if(q.type==='open_text'){
     const nl=q.open_lines||6;
@@ -1870,11 +1911,29 @@ function gerarPDFdeJSON(tipo,data){
 
     for(const linha of blocoLinhas){
       if(y+linha.altura>PH-MB-4){doc.addPage();y=MT;}
+
+      // Imagem real extraída do upload do professor
+      if(linha.imgUpload!==undefined){
+        const img=S?.imagensUpload?.[linha.imgUpload];
+        if(img){
+          try{
+            const fmt=img.contentType.includes('png')?'PNG':img.contentType.includes('gif')?'GIF':'JPEG';
+            const imgW=CONT_W*0.75;
+            const imgH=Math.min(70,imgW*0.66);
+            const xC=ML+(CONT_W-imgW)/2;
+            if(y+imgH>PH-MB-4){doc.addPage();y=MT;}
+            doc.addImage(`data:${img.contentType};base64,${img.data}`,fmt,xC,y,imgW,imgH,'','FAST');
+            y+=imgH+4;
+          }catch(e){console.error('Erro imagem PDF context',e);}
+        }
+        continue;
+      }
+
       doc.setFont('helvetica',linha.bold?'bold':(linha.italic?'italic':'normal'));
       doc.setFontSize(linha.fonte||10);
       doc.setTextColor(...(linha.cor||PRETO));
       if(linha.fundo){doc.setFillColor(...linha.fundo);doc.rect(ML,y,CONT_W,linha.altura,'F');}
-      if(linha.texto!==null){
+      if(linha.texto!==null&&linha.texto!==undefined){
         doc.text(linha.texto,ML+(linha.indent||0),y+(linha.fundo?5:linha.lh*0.75||5));
       }
       if(linha.linhaResposta){doc.setDrawColor(170,170,170);doc.setLineWidth(0.3);doc.line(ML,y+linha.altura-1,ML+CONT_W,y+linha.altura-1);}
@@ -1934,7 +1993,22 @@ function montarLinhasQuestaoPDF(doc,q,W,isAdapt){
   addEspaco(2);
 
   if(q.context_lines?.length){
-    q.context_lines.forEach(l=>addTexto(l));
+    q.context_lines.forEach(l=>{
+      const mImg=l.match(/^\[IMAGEM_UPLOAD_(\d+)\]$/);
+      if(mImg){
+        // Imagem real — adicionar como bloco de imagem com altura estimada
+        const idx=parseInt(mImg[1]);
+        const img=S?.imagensUpload?.[idx];
+        if(img){
+          // Inserir marcador especial para ser renderizado em renderBloco
+          linhas.push({imgUpload:idx,altura:60});// 60mm estimativa, ajustada na renderização real
+        }else{
+          linhas.push({texto:`[Imagem ${idx} — não carregada]`,fonte:FONTE_CAIXA,cor:[150,150,150],altura:LH_CAIXA,indent:0,lh:LH_CAIXA});
+        }
+      }else{
+        addTexto(l);
+      }
+    });
     addEspaco(2);
   }
   if(q.example?.lines?.length){
@@ -1964,6 +2038,22 @@ function montarLinhasQuestaoPDF(doc,q,W,isAdapt){
     for(let i=0;i<max;i++){
       const l=left[i]||'',r=right[i]?`(    ) ${right[i]}`:'';
       addTexto(`${l}     ${r}`);
+    }
+  }else if(q.type==='table'){
+    // Tabela que o aluno completa — cada linha vira um bloco visual no PDF
+    const headers=q.headers||[];
+    const rows=q.rows||[];
+    if(headers.length){
+      // Cabeçalho da tabela como linha destacada
+      addCaixa([headers.join('   |   ')],{fundo:[220,220,220],cor:[20,20,20],lh:LH_CAIXA+1});
+      rows.forEach(row=>{
+        const celulas=row.map((cell,ci)=>{
+          const vazia=cell===''||cell===null||cell===undefined;
+          return vazia?`${headers[ci]||''}:  ___________________`:cell;
+        });
+        addTexto(celulas.join('   |   '));
+        addEspaco(1);
+      });
     }
   }else if(q.type==='open_text'){
     const nl=q.open_lines||2;
@@ -2298,7 +2388,19 @@ function gerarDOCXdeJSON(tipo,data){
     corpo+=par([{texto:MA(`QUESTÃO ${q.number} ${q.value?'('+q.value+')':''}`),fonte:F(12,14),bold:true}],{after:40,keepNext:true});
     corpo+=par([{texto:MA(q.instruction||''),fonte:F(11,14),bold:true,cor:'1A5FA8'}],{after:60,keepNext:true});
 
-    if(q.context_lines?.length)q.context_lines.forEach(l=>corpo+=par([{texto:MA(l),fonte:F(10,14)}],{after:40}));
+    if(q.context_lines?.length)q.context_lines.forEach(l=>{
+      const mImg=l.match(/^\[IMAGEM_UPLOAD_(\d+)\]$/);
+      if(mImg){
+        const idx=parseInt(mImg[1]);
+        const info=uploadRIds[idx];
+        if(info){
+          const imgW=5000000,imgH=3500000;// ~14cm x 10cm em EMU
+          corpo+=`<w:p><w:pPr><w:keepLines/><w:jc w:val="center"/><w:spacing w:before="60" w:after="60"/></w:pPr>${imgXml({rId:info.rId},imgW,imgH)}</w:p>`;
+        }
+      }else{
+        corpo+=par([{texto:MA(l),fonte:F(10,14)}],{after:40});
+      }
+    });
     if(q.example?.lines?.length){
       corpo+=par([{texto:MA('💡 '+(q.example.label||'Exemplo:')),fonte:F(9,12),bold:true,cor:'0A5A50',fundo:'F0FDFA'}],{after:20});
       q.example.lines.forEach(l=>corpo+=par([{texto:MA(l),fonte:F(9,12),cor:'0A5A50',fundo:'F0FDFA'}],{after:20}));
@@ -2325,6 +2427,34 @@ function gerarDOCXdeJSON(tipo,data){
       for(let i=0;i<max;i++){
         const l=left[i]||'',r=right[i]?`(    ) ${right[i]}`:'';
         corpo+=par([{texto:MA(`${l}          ${r}`),fonte:F(11,14)}],{after:40});
+      }
+    }else if(q.type==='table'){
+      // Tabela Word real com cabeçalho e linhas para o aluno preencher
+      const headers=q.headers||[];
+      const rows=q.rows||[];
+      if(headers.length){
+        const nCols=headers.length;
+        const colW=Math.floor(9638/nCols);// largura total A4 com margem 1cm = 9638 DXA
+        const bdr=`<w:top w:val="single" w:sz="4" w:color="555555"/><w:left w:val="single" w:sz="4" w:color="555555"/><w:bottom w:val="single" w:sz="4" w:color="555555"/><w:right w:val="single" w:sz="4" w:color="555555"/>`;
+        const fSzTab=isAdapt?'24':'20';// 12pt adapt / 10pt normal
+        function celula(txt,fundo,negrito){
+          const shade=fundo?`<w:shd w:val="clear" w:fill="${fundo}"/>`:'';
+          const bold=negrito?'<w:b/>':'';
+          return `<w:tc><w:tcPr><w:tcW w:w="${colW}" w:type="dxa"/><w:tcBorders>${bdr}</w:tcBorders>${shade}<w:tcMar><w:top w:w="80" w:type="dxa"/><w:bottom w:w="80" w:type="dxa"/><w:left w:w="120" w:type="dxa"/><w:right w:w="120" w:type="dxa"/></w:tcMar></w:tcPr><w:p><w:pPr><w:jc w:val="center"/></w:pPr><w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial"/><w:sz w:val="${fSzTab}"/><w:szCs w:val="${fSzTab}"/>${bold}<w:lang w:val="pt-BR"/></w:rPr><w:t xml:space="preserve">${esc(MA(txt||''))}</w:t></w:r></w:p></w:tc>`;
+        }
+        let tbl=`<w:tbl><w:tblPr><w:tblW w:w="9638" w:type="dxa"/><w:tblBorders><w:insideH w:val="single" w:sz="4" w:color="555555"/><w:insideV w:val="single" w:sz="4" w:color="555555"/></w:tblBorders></w:tblPr>`;
+        // Linha de cabeçalho
+        tbl+=`<w:tr><w:trPr><w:tblHeader/></w:trPr>${headers.map(h=>celula(h,'DDDDDD',true)).join('')}</w:tr>`;
+        // Linhas de dados
+        rows.forEach(row=>{
+          tbl+=`<w:tr>${row.map((cell,ci)=>{
+            const vazia=cell===''||cell===null||cell===undefined;
+            return celula(vazia?'':cell,vazia?'F9FFF6':'FFFFFF',ci===0&&!vazia);
+          }).join('')}</w:tr>`;
+        });
+        tbl+=`</w:tbl>`;
+        corpo+=tbl;
+        corpo+=vazio();
       }
     }else if(q.type==='open_text'){
       const nl=q.open_lines||2;
